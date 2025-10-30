@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Presupuesto Anual (Con Backup)</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        /* (Estilos CSS - Sin cambios significativos, solo se agregaron botones de backup) */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f8f9fa; color: #212529; line-height: 1.6; padding: 20px;
+        }
+        .container {
+            max-width: 900px; margin: 20px auto; background-color: #ffffff;
+            border-radius: 12px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08); overflow: hidden;
+        }
+        header {
+            padding: 20px 30px; background-color: #007bff; color: white;
+            display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+        }
+        header h1 { margin: 0 0 10px 0; font-size: 1.5rem; width: 100%; }
+        @media (min-width: 600px) { header h1 { width: auto; margin-bottom: 0; } }
+        
+        .header-controls { display: flex; align-items: center; }
+        #monthSelector {
+            font-size: 1rem; padding: 8px 12px; border-radius: 6px; border: none;
+            background-color: #f8f9fa; margin-right: 10px;
+        }
+        .backup-btn {
+            font-size: 0.8rem; padding: 6px 10px; border-radius: 6px; border: none;
+            color: white; font-weight: 600; cursor: pointer; margin-left: 5px;
+        }
+        #exportBtn { background-color: #17a2b8; } /* Cyan */
+        #importBtn { background-color: #28a745; } /* Verde */
+        
+        /* (Resto de los estilos... idénticos al código anterior) */
+        .main-content { display: flex; flex-wrap: nowrap; }
+        .budget-section { flex-grow: 1; }
+        .content { display: flex; flex-wrap: wrap; }
+        .column { width: 100%; padding: 25px 30px; box-sizing: border-box; }
+        @media (min-width: 600px) { .column { width: 50%; } .column:first-child { border-right: 1px solid #dee2e6; } }
+        .column h2 { margin-top: 0; color: #007bff; border-bottom: 2px solid #007bff; padding-bottom: 10px; }
+        .column-gastos h2 { color: #dc3545; border-bottom-color: #dc3545; }
+        .category-item { display: flex; margin-bottom: 15px; align-items: center; }
+        .category-item label { flex-grow: 1; font-weight: 600; color: #495057; }
+        .category-item input { width: 100px; padding: 8px; border: 1px solid #ced4da; border-radius: 6px; text-align: right; font-size: 1rem; margin-left: 10px; }
+        .delete-btn { background: #dc3545; color: white; border: none; border-radius: 50%; width: 24px; height: 24px; font-weight: bold; cursor: pointer; margin-left: 8px; font-size: 14px; line-height: 24px; text-align: center; }
+        .add-category { display: flex; margin-top: 20px; }
+        .add-category input { flex-grow: 1; padding: 8px; border: 1px solid #ced4da; border-radius: 6px; }
+        .add-btn { background: #28a745; color: white; border: none; border-radius: 6px; padding: 0 15px; font-weight: bold; cursor: pointer; margin-left: 10px; font-size: 1.2rem; }
+        .totals { padding: 20px 30px; background-color: #f8f9fa; border-top: 1px solid #dee2e6; }
+        .totals h3 { margin: 0 0 10px 0; font-size: 1.1rem; color: #495057; display: flex; justify-content: space-between; }
+        #totalIncome { color: #28a745; }
+        #totalExpenses { color: #dc3545; }
+        .balance { padding: 25px 30px; background-color: #343a40; color: white; }
+        .balance h2 { margin: 0; font-size: 1.5rem; display: flex; justify-content: space-between; }
+        #monthlyBalance.positive { color: #28a745; }
+        #monthlyBalance.negative { color: #dc3545; }
+        .annual-summary-container { padding: 20px 30px; border-top: 1px solid #dee2e6; }
+        .annual-summary-container h2 { text-align: center; margin-top: 0; color: #343a40; }
+        .annual-totals h3 { display: flex; justify-content: space-between; font-size: 1.1rem; padding: 10px; border-radius: 6px; }
+        #annualIncome { color: #28a745; font-weight: bold; }
+        #annualExpense { color: #dc3545; font-weight: bold; }
+        #annualBalance { font-size: 1.3rem; background-color: #f8f9fa; border-top: 2px solid #ced4da; margin-top: 10px; }
+        #annualBalance.positive { color: #28a745; }
+        #annualBalance.negative { color: #dc3545; }
+        .chart-container { padding: 30px; border-top: 1px solid #dee2e6; }
+
+        /* (NUEVO) Estilo para el pie de página */
+        .footer-credit {
+            text-align: center;
+            margin-top: 20px;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Mi Presupuesto</h1>
+            <div class="header-controls">
+                <select id="monthSelector"></select>
+                <button id="exportBtn" class="backup-btn">Exportar Backup</button>
+                <button id="importBtn" class="backup-btn">Importar Backup</button>
+                <input type="file" id="importFile" accept=".json" style="display: none;">
+            </div>
+        </header>
+
+        <div class="main-content">
+            <div class="budget-section">
+                <div class="content">
+                    <div class="column">
+                        <h2>Ingresos (del mes)</h2>
+                        <div id="incomeList"></div>
+                        <div class="add-category">
+                            <input type="text" id="newIncomeName" placeholder="Nueva categoría...">
+                            <button id="addIncomeBtn" class="add-btn">+</button>
+                        </div>
+                    </div>
+                    <div class="column column-gastos">
+                        <h2>Gastos (del mes)</h2>
+                        <div id="expenseList"></div>
+                        <div class="add-category">
+                            <input type="text" id="newExpenseName" placeholder="Nueva categoría...">
+                            <button id="addExpenseBtn" class="add-btn">+</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="totals">
+                    <h3><span>Total Ingresos (Mes):</span> <span id="totalIncome">$0.00</span></h3>
+                    <h3><span>Total Gastos (Mes):</span> <span id="totalExpenses">$0.00</span></h3>
+                </div>
+                <div class="balance">
+                    <h2><span>Balance (Mes):</span> <span id="monthlyBalance">$0.00</span></h2>
+                </div>
+            </div>
+        </div>
+        <div class="annual-summary-container">
+            <h2>Resumen Anual</h2>
+            <div class="annual-totals">
+                <h3><span>Ingresos Totales (Año):</span> <span id="annualIncome">$0.00</span></h3>
+                <h3><span>Gastos Totales (Año):</span> <span id="annualExpense">$0.00</span></h3>
+                <h3 id="annualBalance"><span>Balance Total (Año):</span> <span>$0.00</span></h3>
+            </div>
+        </div>
+        <div class="chart-container">
+            <canvas id="annualChart"></canvas>
+        </div>
+    </div> <div class="footer-credit">
+        @entre.mercados
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // --- 1. REFERENCIAS A ELEMENTOS ---
+            const monthSelector = document.getElementById('monthSelector');
+            const incomeList = document.getElementById('incomeList');
+            // (El resto del JavaScript es idéntico al anterior)
+            const expenseList = document.getElementById('expenseList');
+            const addIncomeBtn = document.getElementById('addIncomeBtn');
+            const addExpenseBtn = document.getElementById('addExpenseBtn');
+            const newIncomeName = document.getElementById('newIncomeName');
+            const newExpenseName = document.getElementById('newExpenseName');
+            const totalIncomeEl = document.getElementById('totalIncome');
+            const totalExpensesEl = document.getElementById('totalExpenses');
+            const monthlyBalanceEl = document.getElementById('monthlyBalance');
+            const annualIncomeEl = document.getElementById('annualIncome');
+            const annualExpenseEl = document.getElementById('annualExpense');
+            const annualBalanceEl = document.getElementById('annualBalance').querySelector('span:last-child');
+            const annualBalanceContainer = document.getElementById('annualBalance');
+            const exportBtn = document.getElementById('exportBtn');
+            const importBtn = document.getElementById('importBtn');
+            const importFile = document.getElementById('importFile');
+
+            const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+            let currentMonth = months[new Date().getMonth()];
+            let myChart = null;
+            const format = (val) => val.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' });
+
+            // --- 2. LÓGICA DE DATOS (localStorage) ---
+            function getData(month) {
+                const data = localStorage.getItem(`budget_${month}`);
+                if (!data) {
+                    return {
+                        incomes: [{ name: "Sueldo", amount: 0 }],
+                        expenses: [
+                            { name: "Alquiler", amount: 0 },
+                            { name: "Comida", amount: 0 },
+                            { name: "Servicios", amount: 0 }
+                        ]
+                    };
+                }
+                return JSON.parse(data);
+            }
+
+            function saveData(month, data) {
+                localStorage.setItem(`budget_${month}`, JSON.stringify(data));
+            }
+            
+            function getMonthTotals(month) {
+                const data = getData(month);
+                const totalIncome = data.incomes.reduce((sum, item) => sum + item.amount, 0);
+                const totalExpenses = data.expenses.reduce((sum, item) => sum + item.amount, 0);
+                return { totalIncome, totalExpenses, balance: totalIncome - totalExpenses };
+            }
+
+            // --- 3. LÓGICA DE RENDERIZADO ---
+            function renderCategories() {
+                const data = getData(currentMonth);
+                incomeList.innerHTML = '';
+                expenseList.innerHTML = '';
+                data.incomes.forEach(item => {
+                    incomeList.appendChild(createCategoryElement(item, 'income'));
+                });
+                data.expenses.forEach(item => {
+                    expenseList.appendChild(createCategoryElement(item, 'expense'));
+                });
+                calculateCurrentMonthTotals();
+                updateGlobalSummaryAndChart();
+            }
+
+            function createCategoryElement(item, type) {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'category-item';
+                itemEl.innerHTML = `
+                    <label>${item.name}</label>
+                    <input type="number" class="amount" data-name="${item.name}" data-type="${type}" value="${item.amount}" placeholder="0.00">
+                    <button class="delete-btn" data-name="${item.name}" data-type="${type}">X</button>
+                `;
+                return itemEl;
+            }
+
+            // --- 4. LÓGICA DE CÁLCULO ---
+            function calculateCurrentMonthTotals() {
+                const totals = getMonthTotals(currentMonth);
+                totalIncomeEl.textContent = format(totals.totalIncome);
+                totalExpensesEl.textContent = format(totals.totalExpenses);
+                monthlyBalanceEl.textContent = format(totals.balance);
+                monthlyBalanceEl.className = totals.balance >= 0 ? 'positive' : 'negative';
+            }
+
+            function updateGlobalSummaryAndChart() {
+                let totalAnnualIncome = 0;
+                let totalAnnualExpense = 0;
+                let monthlyIncomes = [];
+                let monthlyExpenses = [];
+                let monthlyBalances = [];
+
+                for (const month of months) {
+                    const totals = getMonthTotals(month);
+                    totalAnnualIncome += totals.totalIncome;
+                    totalAnnualExpense += totals.totalExpenses;
+                    monthlyIncomes.push(totals.totalIncome);
+                    monthlyExpenses.push(totals.totalExpenses);
+                    monthlyBalances.push(totals.balance);
+                }
+                
+                let totalAnnualBalance = totalAnnualIncome - totalAnnualExpense;
+                annualIncomeEl.textContent = format(totalAnnualIncome);
+                annualExpenseEl.textContent = format(totalAnnualExpense);
+                annualBalanceEl.textContent = format(totalAnnualBalance);
+                annualBalanceContainer.className = totalAnnualBalance >= 0 ? 'positive' : 'negative';
+                renderChart(monthlyIncomes, monthlyExpenses, monthlyBalances);
+            }
+
+            function renderChart(incomeData, expenseData, balanceData) {
+                const ctx = document.getElementById('annualChart').getContext('2d');
+                if (myChart) {
+                    myChart.destroy();
+                }
+                myChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: months,
+                        datasets: [
+                            { label: 'Ingresos', data: incomeData, backgroundColor: 'rgba(40, 167, 69, 0.7)', },
+                            { label: 'Gastos', data: expenseData, backgroundColor: 'rgba(220, 53, 69, 0.7)', },
+                            { label: 'Balance', data: balanceData, type: 'line', borderColor: '#007bff', fill: false, tension: 0.1 }
+                        ]
+                    },
+                    options: { responsive: true, scales: { y: { beginAtZero: true } } }
+                });
+            }
+
+            // --- 5. LÓGICA DE EVENTOS (Mensual) ---
+            function initMonthSelector() {
+                months.forEach(month => {
+                    const option = document.createElement('option');
+                    option.value = month; option.textContent = month;
+                    monthSelector.appendChild(option);
+                });
+                monthSelector.value = currentMonth;
+            }
+
+            monthSelector.addEventListener('change', (e) => {
+                currentMonth = e.target.value;
+                renderCategories();
+            });
+
+            addIncomeBtn.addEventListener('click', () => {
+                const name = newIncomeName.value.trim();
+                if (name === "") return;
+                const data = getData(currentMonth);
+                if (data.incomes.find(item => item.name === name)) {
+                    alert("Esa categoría ya existe."); return;
+                }
+                data.incomes.push({ name: name, amount: 0 });
+                saveData(currentMonth, data);
+                renderCategories();
+                newIncomeName.value = '';
+            });
+
+            addExpenseBtn.addEventListener('click', () => {
+                const name = newExpenseName.value.trim();
+                if (name === "") return;
+                const data = getData(currentMonth);
+                if (data.expenses.find(item => item.name === name)) {
+                    alert("Esa categoría ya existe."); return;
+                }
+                data.expenses.push({ name: name, amount: 0 });
+                saveData(currentMonth, data);
+                renderCategories();
+                newExpenseName.value = '';
+            });
+
+            function handleInput(e) {
+                if (!e.target.classList.contains('amount')) return;
+                const data = getData(currentMonth);
+                const name = e.target.dataset.name;
+                const type = e.target.dataset.type;
+                const amount = parseFloat(e.target.value) || 0;
+                const list = (type === 'income') ? data.incomes : data.expenses;
+                const item = list.find(i => i.name === name);
+                if (item) { item.amount = amount; }
+                saveData(currentMonth, data);
+                calculateCurrentMonthTotals();
+                updateGlobalSummaryAndChart();
+            }
+
+            function handleDelete(e) {
+                if (!e.target.classList.contains('delete-btn')) return;
+                if (!confirm("¿Estás seguro de que quieres eliminar esta categoría?")) return;
+                const data = getData(currentMonth);
+                const name = e.target.dataset.name;
+                const type = e.target.dataset.type;
+                if (type === 'income') {
+                    data.incomes = data.incomes.filter(i => i.name !== name);
+                } else {
+                    data.expenses = data.expenses.filter(i => i.name !== name);
+                }
+                saveData(currentMonth, data);
+                renderCategories();
+            }
+
+            const appContainer = document.querySelector('.container');
+            appContainer.addEventListener('input', handleInput);
+            appContainer.addEventListener('click', (e) => {
+                if (e.target.classList.contains('delete-btn')) { handleDelete(e); }
+            });
+
+            // --- 6. LÓGICA DE BACKUP (Exportar / Importar) ---
+            exportBtn.addEventListener('click', () => {
+                let allData = {};
+                for (const month of months) {
+                    const monthData = localStorage.getItem(`budget_${month}`);
+                    if (monthData) {
+                        allData[month] = JSON.parse(monthData);
+                    }
+                }
+                const dataStr = JSON.stringify(allData, null, 2);
+                const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+                const exportLink = document.createElement('a');
+                exportLink.setAttribute('href', dataUri);
+                const date = new Date().toISOString().slice(0, 10);
+                exportLink.setAttribute('download', `backup_presupuesto_${date}.json`);
+                document.body.appendChild(exportLink);
+                exportLink.click();
+                document.body.removeChild(exportLink);
+                alert("¡Backup exportado con éxito!");
+            });
+
+            importBtn.addEventListener('click', () => {
+                if (!confirm("Importante: Esto sobrescribirá todos los datos actuales con los del archivo. ¿Continuar?")) {
+                    return;
+                }
+                importFile.click();
+            });
+
+            importFile.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) { return; }
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const importedData = JSON.parse(e.target.result);
+                        let importedMonths = 0;
+                        for (const monthName in importedData) {
+                            if (months.includes(monthName)) {
+                                saveData(monthName, importedData[monthName]);
+                                importedMonths++;
+                            }
+                        }
+                        alert(`¡Importación completada! Se cargaron los datos de ${importedMonths} meses.`);
+                        renderCategories();
+                    } catch (error) {
+                        alert("Error: El archivo no es un backup válido o está corrupto.");
+                        console.error("Error al parsear JSON importado:", error);
+                    }
+                };
+                reader.readAsText(file);
+                importFile.value = null; 
+            });
+
+            // --- 7. INICIALIZACIÓN ---
+            initMonthSelector();
+            renderCategories();
+        });
+    </script>
+</body>
+</html>
